@@ -4,6 +4,21 @@ Music Stream is a full-stack music discovery and personal playlist app. Sign in
 with Google to manage your playlists, search for tracks, and play them
 through a responsive React interface.
 
+<p align="center">
+  <img src="screenshots/home.png" alt="Music Stream home screen with personal playlists and player" width="100%">
+</p>
+
+<p align="center">
+  <img src="screenshots/login.png" alt="Google sign-in screen" width="49%">
+  <img src="screenshots/search.png" alt="Music search results screen" width="49%">
+</p>
+<p align="center"><em>Google sign-in and song search</em></p>
+
+<p align="center">
+  <img src="screenshots/playlist.png" alt="Playlist details and track list" width="100%">
+</p>
+<p align="center"><em>Personal playlists with playback controls</em></p>
+
 ## Features
 
 - Google sign-in with verified-email checks and JSON Web Token (JWT) sessions
