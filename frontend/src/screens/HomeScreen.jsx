@@ -1,26 +1,71 @@
-import React from 'react';
-import { Play, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Play, Plus, LogOut } from 'lucide-react';
 import VinylDisc from '../components/VinylDisc';
 
 export default function HomeScreen({ 
   playlists = [], 
   onSelectPlaylist,
   onPlayPlaylist,
-  onOpenCreateModal
+  onOpenCreateModal,
+  user,
+  onLogout
 }) {
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.picture]);
+
+  const fullName = user?.name || user?.email || 'Listener';
+  const firstName = fullName.split(' ')[0];
+  const initial = fullName.trim().charAt(0).toUpperCase() || 'U';
+
   return (
     <div className="w-full min-h-full px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col font-sans select-none">
       {/* Top Header greeting */}
-      <div className="mb-6 sm:mb-8">
-        <p className="text-[11px] font-bold tracking-widest text-neutral-400 uppercase">
-          YOUR MUSIC, YOUR MOMENT
-        </p>
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white mt-1">
-          Welcome back, Kevin
-        </h1>
-        <p className="text-sm sm:text-base text-neutral-400 mt-1">
-          Pick a playlist. Find your rhythm.
-        </p>
+      <div className="mb-6 sm:mb-8 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold tracking-widest text-neutral-400 uppercase">
+            YOUR MUSIC, YOUR MOMENT
+          </p>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white mt-1 truncate">
+            Welcome back, {firstName}
+          </h1>
+          <p className="text-sm sm:text-base text-neutral-400 mt-1">
+            Pick a playlist. Find your rhythm.
+          </p>
+        </div>
+
+        {/* Mobile/Tablet Account Pill & Logout (Sidebar handles desktop) */}
+        <div className="flex lg:hidden items-center space-x-2 flex-shrink-0 bg-neutral-900/80 border border-neutral-800/80 rounded-full pl-1.5 pr-2 py-1">
+          {user?.picture && !avatarError ? (
+            <img
+              src={user.picture}
+              alt={fullName}
+              referrerPolicy="no-referrer"
+              onError={() => setAvatarError(true)}
+              className="w-7 h-7 rounded-full object-cover border border-neutral-700/70"
+            />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white text-[11px]">
+              {initial}
+            </div>
+          )}
+          <span className="hidden sm:inline text-xs font-semibold text-neutral-200 max-w-[120px] truncate">
+            {firstName}
+          </span>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={() => onLogout()}
+              className="p-1.5 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              title="Log out"
+              aria-label="Log out"
+            >
+              <LogOut size={15} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Section title, count & Plus Button */}

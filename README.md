@@ -194,3 +194,44 @@ npm run dev
 ```
 
 Open `http://localhost:5173`.
+
+## Measuring API Latency and Throughput
+
+The Locust workload in `backend/locustfile.py` exercises the playlist feed and
+the database-backed song catalog search. Search intentionally omits `q`, so
+the test does not send repeated searches to YouTube. Playlist detail requests
+are included when `LOCUST_PLAYLIST_ID` is set to an existing playlist ID.
+
+Install Locust in the backend virtual environment:
+
+```powershell
+pip install locust
+```
+
+With the backend and MySQL running, start Locust from the repository root:
+
+```powershell
+python -m locust -f backend/locustfile.py
+```
+
+Open `http://localhost:8089`, then start with a small number of users and a
+gradual spawn rate. The default target is `http://127.0.0.1:8000`; use
+`LOCUST_HOST` to change it only when intentionally testing another environment.
+For example, in PowerShell:
+
+```powershell
+$env:LOCUST_PLAYLIST_ID = "1"
+python -m locust -f backend/locustfile.py
+```
+
+Locust reports request counts, failures, requests per second, and response-time
+percentiles (including median, p95, and p99). For a reproducible run, use
+headless mode and CSV output:
+
+```powershell
+python -m locust -f backend/locustfile.py --headless --users 10 --spawn-rate 2 --run-time 2m --csv backend/locust-results
+```
+
+Start with low concurrency, monitor the API and MySQL, and increase the load
+gradually. Results depend on the machine, database contents, network, and
+runtime configuration; record those conditions when comparing runs.

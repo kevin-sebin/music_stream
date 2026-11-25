@@ -1,8 +1,92 @@
-import { INITIAL_PLAYLISTS, INITIAL_SONGS } from '../data/musicData';
+import { INITIAL_SONGS } from '../data/musicData';
 
-export const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
+const AUTH_TOKEN_STORAGE_KEY = 'musicstream_access_token';
 const COLOR_PALETTE = ['#356e3f', '#306975', '#923c38', '#ad8a32', '#593671', '#6d3753', '#374868'];
+
+let onUnauthorizedCallback = null;
+
+export function setOnUnauthorizedHandler(handler) {
+  onUnauthorizedCallback = handler;
+}
+
+export function getAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token) {
+  try {
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export function clearAuthToken() {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function createAuthError(message, status = 401) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+/**
+ * Centralized fetch wrapper for protected backend endpoints.
+ * Automatically attaches `Authorization: Bearer <token>` and handles 401 responses.
+ */
+export async function authFetch(path, options = {}) {
+  const token = getAuthToken();
+  if (!token) {
+    if (onUnauthorizedCallback) {
+      onUnauthorizedCallback(null);
+    }
+    throw createAuthError('Authentication required.', 401);
+  }
+
+  const { headers = {}, ...restOptions } = options;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...restOptions,
+    headers: {
+      ...headers,
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (response.status === 401) {
+    clearAuthToken();
+    if (onUnauthorizedCallback) {
+      onUnauthorizedCallback('Your session expired. Please sign in again.');
+    }
+    throw createAuthError('Session expired or invalid token.', 401);
+  }
+
+  return response;
+}
+
+export async function fetchCurrentUser() {
+  const response = await authFetch('/auth/me');
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw createAuthError(
+      errorText || `Failed to verify user session (${response.status}).`,
+      response.status
+    );
+  }
+  return await response.json();
+}
 
 /**
  * Normalizes any song object returned by the backend (FastAPI / YouTube / SQL)
@@ -180,59 +264,60 @@ export function formatPlaylistDate(dateVal) {
 }
 
 export async function fetchPlaylists() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    const response = await fetch(`${API_BASE_URL}/`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (!response.ok) throw new Error('Network error');
+    const response = await authFetch('/', { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch playlists (${response.status})`);
+    }
     const data = await response.json();
-    if (Array.isArray(data) && data.length > 0) {
+    if (Array.isArray(data)) {
       return data.map((pl, idx) => {
-        const fallback = INITIAL_PLAYLISTS[idx % INITIAL_PLAYLISTS.length];
-        const resolvedImg = resolvePlaylistImg(pl.img) || fallback.img;
-        const actualDate = pl.created_at || fallback.created_at;
-        const displayDate = formatPlaylistDate(actualDate) || fallback.createdAtDisplay || 'Recently';
+        const resolvedImg = resolvePlaylistImg(pl.img);
+        const actualDate = pl.created_at || '';
+        const displayDate = formatPlaylistDate(actualDate) || 'Recently';
+        const color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
 
         return {
           _pid: pl._pid ?? pl.id,
-          name: pl.name || fallback.name,
-          genre: pl.genre || fallback.genre,
-          displayGenre: pl.genre ? pl.genre.split('·')[0].trim() : fallback.displayGenre,
-          songsCount: pl.songsCount !== undefined ? pl.songsCount : (fallback.songsCount || 0),
-          durationText: fallback.durationText || '0 min',
+          name: pl.name || 'Untitled Playlist',
+          genre: pl.genre || 'Indie · Chill',
+          displayGenre: pl.genre ? pl.genre.split('·')[0].trim() : 'Indie',
+          songsCount: pl.songsCount !== undefined ? pl.songsCount : 0,
+          durationText: '0 min',
           created_at: actualDate,
           createdAtDisplay: displayDate,
-          color: fallback.color,
-          accentColor: fallback.accentColor,
-          textColor: fallback.textColor,
+          color,
+          accentColor: `${color}80`,
+          textColor: '#e5e5e5',
           img: resolvedImg,
           thumbnail: resolvedImg
         };
       });
     }
-  } catch (err) {
-    console.warn('Backend unavailable, using local mock data:', err.message);
+    return [];
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return INITIAL_PLAYLISTS;
 }
 
 export async function fetchPlaylistSongs(pid) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    const response = await fetch(`${API_BASE_URL}/playlists/${pid}`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (!response.ok) throw new Error('Network error');
+    const response = await authFetch(`/playlists/${pid}`, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch playlist songs (${response.status})`);
+    }
     const data = await response.json();
     if (Array.isArray(data)) {
       return data.map((song, idx) => normalizeSong(song, idx));
     }
-  } catch (err) {
-    console.warn(`Backend unavailable for playlist ${pid}, using local songs:`, err.message);
+    return [];
+  } finally {
+    clearTimeout(timeoutId);
   }
-  const songs = INITIAL_SONGS.filter(s => s.playlistId === Number(pid));
-  return songs.length > 0 ? songs : INITIAL_SONGS.slice(0, 6);
 }
 
 export async function searchSongsAPI(query) {
@@ -271,7 +356,7 @@ export async function createPlaylistAPI(playlistData) {
     genre: playlistData.genre || 'Indie · Chill'
   };
 
-  const response = await fetch(`${API_BASE_URL}/playlists`, {
+  const response = await authFetch('/playlists', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -308,7 +393,7 @@ export async function addSongToPlaylistAPI(pid, song) {
     img: song.thumbnail || song.img || ''
   };
 
-  const response = await fetch(`${API_BASE_URL}/playlists/${pid}`, {
+  const response = await authFetch(`/playlists/${pid}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -332,7 +417,7 @@ export async function updatePlaylistAPI(pid, updateData) {
   if (updateData.img !== undefined) payload.img = updateData.img;
   if (updateData.created_at) payload.created_at = updateData.created_at;
 
-  const response = await fetch(`${API_BASE_URL}/playlists/${pid}`, {
+  const response = await authFetch(`/playlists/${pid}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json'
@@ -349,7 +434,7 @@ export async function updatePlaylistAPI(pid, updateData) {
 }
 
 export async function deletePlaylistAPI(pid) {
-  const response = await fetch(`${API_BASE_URL}/playlists/${pid}`, {
+  const response = await authFetch(`/playlists/${pid}`, {
     method: 'DELETE'
   });
 
@@ -362,7 +447,7 @@ export async function deletePlaylistAPI(pid) {
 }
 
 export async function removeSongFromPlaylistAPI(pid, sid) {
-  const response = await fetch(`${API_BASE_URL}/playlists/${pid}/songs/${sid}`, {
+  const response = await authFetch(`/playlists/${pid}/songs/${sid}`, {
     method: 'DELETE'
   });
 
@@ -378,7 +463,7 @@ export async function removeSongFromPlaylistAPI(pid, sid) {
  * 1. Request presigned upload URL from FastAPI PUT /playlists/{pid}/thumbnail/upload-url
  */
 export async function getPlaylistThumbnailUploadUrlAPI(pid, contentType) {
-  const response = await fetch(`${API_BASE_URL}/playlists/${pid}/thumbnail/upload-url`, {
+  const response = await authFetch(`/playlists/${pid}/thumbnail/upload-url`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
@@ -418,7 +503,7 @@ export async function uploadToS3(uploadUrl, file, contentType) {
  * 3. Save S3 object_key to backend via PUT /playlists/{pid}/thumbnail
  */
 export async function savePlaylistThumbnailAPI(pid, objectKey) {
-  const response = await fetch(`${API_BASE_URL}/playlists/${pid}/thumbnail`, {
+  const response = await authFetch(`/playlists/${pid}/thumbnail`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'

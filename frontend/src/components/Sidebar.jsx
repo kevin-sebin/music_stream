@@ -1,5 +1,5 @@
-import React from 'react';
-import { Home, Search, Disc3, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Home, Search, Disc3, Plus, LogOut } from 'lucide-react';
 
 export default function Sidebar({
   activeView,
@@ -7,8 +7,19 @@ export default function Sidebar({
   playlists = [],
   selectedPlaylistId,
   onSelectPlaylist,
-  onOpenCreateModal
+  onOpenCreateModal,
+  user,
+  onLogout
 }) {
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.picture]);
+
+  const displayName = user?.name || user?.email || 'Listener';
+  const displayEmail = user?.email || '';
+  const initial = displayName.trim().charAt(0).toUpperCase() || 'U';
   return (
     <aside className="hidden lg:flex flex-col w-64 xl:w-72 bg-[#0a0b0f] border-r border-neutral-800/80 h-full flex-shrink-0 select-none">
       {/* Brand Header */}
@@ -98,16 +109,42 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* User Kevin Profile Footer */}
+      {/* Authenticated User Profile Footer */}
       <div className="p-4 border-t border-neutral-800/80 bg-[#08090c]">
-        <div className="flex items-center space-x-3 px-2 py-1">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white text-xs shadow-md">
-            K
+        <div className="flex items-center justify-between space-x-2 px-1 py-1">
+          <div className="flex items-center space-x-3 min-w-0">
+            {user?.picture && !avatarError ? (
+              <img
+                src={user.picture}
+                alt={displayName}
+                referrerPolicy="no-referrer"
+                onError={() => setAvatarError(true)}
+                className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-neutral-700/70 shadow-md"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white text-xs flex-shrink-0 shadow-md">
+                {initial}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white truncate leading-tight">{displayName}</p>
+              {displayEmail && (
+                <p className="text-[11px] text-neutral-400 truncate leading-tight mt-0.5">{displayEmail}</p>
+              )}
+            </div>
           </div>
-          <div className="truncate">
-            <p className="text-sm font-bold text-white truncate leading-tight">Kevin</p>
-            <p className="text-[11px] text-neutral-400 truncate leading-tight mt-0.5">Premium Listener</p>
-          </div>
+
+          {onLogout && (
+            <button
+              type="button"
+              onClick={() => onLogout()}
+              className="p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800/80 transition-colors flex-shrink-0"
+              title="Log out"
+              aria-label="Log out"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
         </div>
       </div>
     </aside>

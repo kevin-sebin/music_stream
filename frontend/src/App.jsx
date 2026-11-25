@@ -9,11 +9,11 @@ import {
   deletePlaylistAPI,
   removeSongFromPlaylistAPI,
   uploadPlaylistThumbnail,
-  formatPlaylistDuration,
-  formatPlaylistDate
+  formatPlaylistDuration
 } from './services/api';
-import { INITIAL_PLAYLISTS, INITIAL_SONGS } from './data/musicData';
+import { INITIAL_SONGS } from './data/musicData';
 import { synth } from './services/audioPlayer';
+import { useAuth } from './context/AuthContext';
 
 import Sidebar from './components/Sidebar';
 import PlayerBar from './components/PlayerBar';
@@ -22,12 +22,38 @@ import BottomNav from './components/BottomNav';
 import MiniPlayer from './components/MiniPlayer';
 import CreatePlaylistModal from './components/CreatePlaylistModal';
 
+import LoginScreen from './screens/LoginScreen';
 import HomeScreen from './screens/HomeScreen';
 import SearchScreen from './screens/SearchScreen';
 import PlaylistDetailScreen from './screens/PlaylistDetailScreen';
 import NowPlayingScreen from './screens/NowPlayingScreen';
 
 export default function App() {
+  const {
+    user,
+    isAuthenticated,
+    isLoading,
+    authError,
+    loginWithGoogle,
+    logout,
+    clearAuthError
+  } = useAuth();
+
+  if (isLoading || !isAuthenticated) {
+    return (
+      <LoginScreen
+        onGoogleLogin={loginWithGoogle}
+        isVerifyingSession={isLoading}
+        error={authError}
+        onDismissError={clearAuthError}
+      />
+    );
+  }
+
+  return <AuthenticatedMusicApp key={user.id} user={user} onLogout={logout} />;
+}
+
+function AuthenticatedMusicApp({ user, onLogout }) {
   const audioRef = useRef(null);
 
   // Navigation View: 'home' | 'search' | 'playlist'
@@ -42,11 +68,11 @@ export default function App() {
   // Create playlist modal toggle
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  // Playlists and Songs state
-  const [playlists, setPlaylists] = useState(INITIAL_PLAYLISTS);
-  const [selectedPlaylist, setSelectedPlaylist] = useState(INITIAL_PLAYLISTS[0]); // "Late night"
-  const [playlistSongs, setPlaylistSongs] = useState(INITIAL_SONGS.slice(0, 6));
-  const [playbackQueue, setPlaybackQueue] = useState(INITIAL_SONGS.slice(0, 6));
+  // Playlists and Songs state (populated for the authenticated user)
+  const [playlists, setPlaylists] = useState([]);
+  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
+  const [playlistSongs, setPlaylistSongs] = useState([]);
+  const [playbackQueue, setPlaybackQueue] = useState([]);
 
   // Search state (only triggered on Enter / submit)
   const [searchQuery, setSearchQuery] = useState('night');
@@ -62,20 +88,45 @@ export default function App() {
   const [isRepeat, setIsRepeat] = useState(false);
   const [volume, setVolume] = useState(75);
 
-  // Load playlists and initial songs from API/mock
+  // Ensure audio stops cleanly when logging out / unmounting
   useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      synth.stop();
+    };
+  }, []);
+
+  // Load authenticated user's playlists and initial playlist songs from backend
+  useEffect(() => {
+    let isMounted = true;
     async function loadData() {
-      const loaded = await fetchPlaylists();
-      setPlaylists(loaded);
-      if (loaded.length > 0) {
-        setSelectedPlaylist(loaded[0]);
-        const songs = await fetchPlaylistSongs(loaded[0]._pid);
-        setPlaylistSongs(songs);
-        setPlaybackQueue(songs);
+      try {
+        const loaded = await fetchPlaylists();
+        if (!isMounted) return;
+        setPlaylists(loaded);
+        if (loaded.length > 0) {
+          setSelectedPlaylist(loaded[0]);
+          const songs = await fetchPlaylistSongs(loaded[0]._pid);
+          if (!isMounted) return;
+          setPlaylistSongs(songs);
+          setPlaybackQueue(songs);
+        } else {
+          setSelectedPlaylist(null);
+          setPlaylistSongs([]);
+          setPlaybackQueue([]);
+        }
+      } catch (err) {
+        if (err?.status === 401) return;
+        console.warn('Failed to load user playlists:', err.message);
       }
     }
     loadData();
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
 
   // Search songs only when explicitly submitted (e.g. Enter pressed)
   const executeSearch = async (query) => {
@@ -160,24 +211,34 @@ export default function App() {
 
   const handlePlayPlaylist = async (playlist) => {
     setSelectedPlaylist(playlist);
-    const songs = await fetchPlaylistSongs(playlist._pid);
-    setPlaylistSongs(songs);
-    setPlaybackQueue(songs);
-    if (songs && songs.length > 0) {
-      handlePlaySong(songs[0]);
-      setIsNowPlayingOpen(true);
+    try {
+      const songs = await fetchPlaylistSongs(playlist._pid);
+      setPlaylistSongs(songs);
+      setPlaybackQueue(songs);
+      if (songs && songs.length > 0) {
+        handlePlaySong(songs[0]);
+        setIsNowPlayingOpen(true);
+      }
+    } catch (err) {
+      if (err?.status === 401) return;
+      console.warn('Failed to play playlist:', err.message);
     }
   };
 
   const handleSelectPlaylist = async (playlist) => {
     setSelectedPlaylist(playlist);
-    const songs = await fetchPlaylistSongs(playlist._pid);
-    setPlaylistSongs(songs);
-    setPlaybackQueue(songs);
-    const durationText = formatPlaylistDuration(songs);
-    setSelectedPlaylist(prev => prev ? { ...prev, songsCount: songs.length, durationText } : prev);
-    setPlaylists(prev => prev.map(p => p._pid === playlist._pid ? { ...p, songsCount: songs.length, durationText } : p));
-    setActiveView('playlist');
+    try {
+      const songs = await fetchPlaylistSongs(playlist._pid);
+      setPlaylistSongs(songs);
+      setPlaybackQueue(songs);
+      const durationText = formatPlaylistDuration(songs);
+      setSelectedPlaylist(prev => prev ? { ...prev, songsCount: songs.length, durationText } : prev);
+      setPlaylists(prev => prev.map(p => p._pid === playlist._pid ? { ...p, songsCount: songs.length, durationText } : p));
+      setActiveView('playlist');
+    } catch (err) {
+      if (err?.status === 401) return;
+      console.warn('Failed to load playlist songs:', err.message);
+    }
   };
 
   const handlePlayAll = (songs, shuffleMode = false) => {
@@ -225,7 +286,7 @@ export default function App() {
     handlePlaySong(list[nextIndex]);
   };
 
-  const handleCreatePlaylist = async (playlistData, imageFile, localPreviewUrl = '') => {
+  const handleCreatePlaylist = async (playlistData, imageFile) => {
     try {
       // 1. Directly hits backend POST /playlists
       const res = await createPlaylistAPI({ ...playlistData, img: '' });
@@ -262,28 +323,8 @@ export default function App() {
         setActiveView('playlist');
       }
     } catch (err) {
-      console.warn('Backend createPlaylist returned error, creating locally:', err.message);
-      // Fallback local creation if database or backend is not connected
-      const today = new Date().toISOString().split('T')[0];
-      const newPlaylist = {
-        _pid: Date.now(),
-        name: playlistData.name,
-        genre: playlistData.genre,
-        displayGenre: playlistData.genre.split('·')[0].trim(),
-        songsCount: 0,
-        durationText: '0 min',
-        created_at: today,
-        createdAtDisplay: formatPlaylistDate(today),
-        color: playlistData.color || '#356e3f',
-        accentColor: 'rgba(53, 110, 63, 0.5)',
-        textColor: '#95e0a0',
-        img: localPreviewUrl || playlistData.img || '',
-        thumbnail: localPreviewUrl || playlistData.img || ''
-      };
-      setPlaylists(prev => [newPlaylist, ...prev]);
-      setSelectedPlaylist(newPlaylist);
-      setPlaylistSongs([]);
-      setActiveView('playlist');
+      if (err?.status === 401) return;
+      throw err;
     }
   };
 
@@ -304,35 +345,22 @@ export default function App() {
         setSelectedPlaylist(prev => prev ? { ...prev, songsCount: songs.length, durationText } : prev);
       }
     } catch (err) {
-      console.warn('Backend add song error, updating locally:', err.message);
-      // Graceful local update if backend table/endpoint has issues or is offline
-      setPlaylists(prev => prev.map(p => {
-        if (p._pid === Number(pid)) {
-          return { ...p, songsCount: (p.songsCount || 0) + 1 };
-        }
-        return p;
-      }));
-      if (selectedPlaylist?._pid === Number(pid)) {
-        setPlaylistSongs(prev => {
-          const next = [...prev, song];
-          const durationText = formatPlaylistDuration(next);
-          setSelectedPlaylist(curr => curr ? { ...curr, songsCount: next.length, durationText } : curr);
-          return next;
-        });
-      }
+      if (err?.status === 401) return;
+      throw err;
     }
   };
 
   const handleUpdatePlaylist = async (pid, data) => {
     try {
       await updatePlaylistAPI(pid, data);
+      const updated = await fetchPlaylists();
+      setPlaylists(updated);
+      const current = updated.find(p => p._pid === Number(pid));
+      if (current) setSelectedPlaylist(current);
     } catch (err) {
-      console.warn('Backend update playlist error:', err.message);
+      if (err?.status === 401) return;
+      throw err;
     }
-    const updated = await fetchPlaylists();
-    setPlaylists(updated);
-    const current = updated.find(p => p._pid === Number(pid));
-    if (current) setSelectedPlaylist(current);
   };
 
   const handleDeletePlaylist = async (pid) => {
@@ -342,16 +370,15 @@ export default function App() {
       setPlaylists(updated);
       if (updated.length > 0) {
         setSelectedPlaylist(updated[0]);
+      } else {
+        setSelectedPlaylist(null);
+        setPlaylistSongs([]);
       }
       setActiveView('home');
     } catch (err) {
-      console.warn('Backend delete playlist error, deleting locally:', err.message);
-      setPlaylists(prev => {
-        const next = prev.filter(p => p._pid !== Number(pid));
-        if (next.length > 0) setSelectedPlaylist(next[0]);
-        return next;
-      });
-      setActiveView('home');
+      if (err?.status === 401) return;
+      console.warn('Backend delete playlist error:', err.message);
+      throw err;
     }
   };
 
@@ -367,19 +394,9 @@ export default function App() {
         setSelectedPlaylist(prev => prev ? { ...prev, songsCount: songs.length, durationText } : prev);
       }
     } catch (err) {
-      console.warn('Backend remove song error, removing locally:', err.message);
-      setPlaylistSongs(prev => {
-        const next = prev.filter(s => s._sid !== sid);
-        const durationText = formatPlaylistDuration(next);
-        setSelectedPlaylist(curr => curr ? { ...curr, songsCount: next.length, durationText } : curr);
-        return next;
-      });
-      setPlaylists(prev => prev.map(p => {
-        if (p._pid === Number(pid)) {
-          return { ...p, songsCount: Math.max(0, (p.songsCount || 1) - 1) };
-        }
-        return p;
-      }));
+      if (err?.status === 401) return;
+      console.warn('Backend remove song error:', err.message);
+      throw err;
     }
   };
 
@@ -393,6 +410,8 @@ export default function App() {
         selectedPlaylistId={selectedPlaylist?._pid}
         onSelectPlaylist={handleSelectPlaylist}
         onOpenCreateModal={() => setIsCreateModalOpen(true)}
+        user={user}
+        onLogout={onLogout}
       />
 
       {/* 2. MAIN CENTER CONTENT AREA */}
@@ -405,6 +424,8 @@ export default function App() {
               onSelectPlaylist={handleSelectPlaylist}
               onPlayPlaylist={handlePlayPlaylist}
               onOpenCreateModal={() => setIsCreateModalOpen(true)}
+              user={user}
+              onLogout={onLogout}
             />
           )}
 

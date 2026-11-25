@@ -7,3 +7,6 @@ yt-dlp==2026.10.26
 pydantic==2.12.2
 boto3
 python-dotenv
+authlib
+itsdangerous
+PyJWT

@@ -1,9 +1,7 @@
 from typing import Optional
-
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-
 from backend.db.database import get_db
 from backend.services import song_service
 
