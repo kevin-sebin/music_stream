@@ -10,7 +10,7 @@ through a responsive React interface.
 <p align="center"><em>Home — browse your playlists and control playback.</em></p>
 
 <p align="center">
-  <img src="screenshots/login.png" alt="Google sign-in screen" width="49%">
+  <img src="screenshots/login.png" alt="Google sign-in screen" width="100%">
 </p>
 <p align="center"><em>Sign in securely with your Google account.</em></p>
 
