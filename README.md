@@ -7,17 +7,22 @@ through a responsive React interface.
 <p align="center">
   <img src="screenshots/home.png" alt="Music Stream home screen with personal playlists and player" width="100%">
 </p>
+<p align="center"><em>Home — browse your playlists and control playback.</em></p>
 
 <p align="center">
   <img src="screenshots/login.png" alt="Google sign-in screen" width="49%">
-  <img src="screenshots/search.png" alt="Music search results screen" width="49%">
 </p>
-<p align="center"><em>Google sign-in and song search</em></p>
+<p align="center"><em>Sign in securely with your Google account.</em></p>
+
+<p align="center">
+  <img src="screenshots/search.png" alt="Music search results screen" width="100%">
+</p>
+<p align="center"><em>Search for songs and explore matching tracks.</em></p>
 
 <p align="center">
   <img src="screenshots/playlist.png" alt="Playlist details and track list" width="100%">
 </p>
-<p align="center"><em>Personal playlists with playback controls</em></p>
+<p align="center"><em>View a playlist, manage its tracks, and start playback.</em></p>
 
 ## Features
 
