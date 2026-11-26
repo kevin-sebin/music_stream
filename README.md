@@ -33,6 +33,7 @@ through a responsive React interface.
 - Playback controls for play/pause, seeking, volume, shuffle, repeat, and queue
 - Optional playlist cover uploads directly to Amazon S3 using presigned URLs
 - MySQL persistence for users, playlists, songs, and playlist membership
+- Redis caching for each signed-in user's home-feed playlist summary
 - Synthetic audio fallback when a playable stream is unavailable
 
 ## Project layout
@@ -41,12 +42,12 @@ through a responsive React interface.
 music_stream/
 ├── backend/
 │   ├── app/              # FastAPI application and middleware
-│   ├── core/             # Environment settings and Google OAuth client
+│   ├── core/             # Environment settings, Redis, and Google OAuth client
 │   ├── db/               # SQLAlchemy engine and session
 │   ├── models/           # User, playlist, and song tables
 │   ├── routers/          # Authentication, playlist, and song endpoints
 │   ├── schemas/          # Request models
-│   └── services/         # Auth/JWT, playlist, song, and S3 logic
+│   └── services/         # Auth/JWT, playlist, song, Redis cache, and S3 logic
 └── frontend/
     └── src/
         ├── components/   # Navigation, playback controls, and modals
@@ -58,6 +59,7 @@ music_stream/
 ## Technology
 
 - **Backend:** Python, FastAPI, Uvicorn, SQLAlchemy, MySQL/PyMySQL
+- **Caching:** Redis (`redis-py`)
 - **Authentication:** Google OpenID Connect via Authlib, Starlette sessions,
   PyJWT bearer tokens
 - **Music:** `yt-dlp` search and stream URL resolution
@@ -69,6 +71,7 @@ music_stream/
 - Python 3.10 or newer
 - Node.js 18 or newer and npm
 - A running MySQL server and a database for the app
+- A Redis server or managed Redis instance
 - A Google OAuth 2.0 Web application client
 - AWS credentials and an S3 bucket only if playlist cover uploads are needed
 
@@ -113,6 +116,7 @@ GOOGLE_REDIRECT_URI=http://127.0.0.1:8000/auth/google/callback
 
 SESSION_SECRET_KEY=replace_with_a_long_random_secret
 JWT_SECRET_KEY=replace_with_a_different_long_random_secret
+REDIS_URL=redis://127.0.0.1:6379/0
 ```
 
 Generate a secret in PowerShell with
@@ -120,6 +124,11 @@ Generate a secret in PowerShell with
 separately for each secret. Keep this file and the OAuth client secret private.
 The backend loads `backend/.env` automatically. `MYSQL_PORT` defaults to
 `3306` if omitted.
+
+`REDIS_URL` is required. Use `redis://127.0.0.1:6379/0` for a local Redis
+server, or a managed Redis URL such as `rediss://default:password@host:6379`
+for a TLS connection. Redis failures are handled as cache misses: reads return
+no cached data and writes/deletions are skipped with a warning.
 
 Optional settings for playlist covers:
 
@@ -147,6 +156,19 @@ tables that do not yet exist. It does **not** migrate existing tables: if you
 are upgrading an older database, add the nullable `playlists.user_id` column
 and its foreign key to `users.uid`, and decide how existing playlists should be
 assigned to users. Otherwise, use a fresh database.
+
+### Redis cache behavior
+
+The home-feed endpoint caches playlist summaries by signed-in user:
+
+```text
+home_feed:{user_id}
+```
+
+Cached entries expire after 300 seconds. The cache is invalidated after
+playlist creation, updates, thumbnail changes or deletion, and after a song is
+added or removed, so that the user's next home-feed request reflects the latest
+database state.
 
 ## Frontend setup
 
@@ -218,7 +240,7 @@ Interactive documentation is available at `http://127.0.0.1:8000/docs` and
   for local HTTP development. Before deployment, restrict CORS to trusted
   frontend origins, use HTTPS, and configure secure session cookies.
 - Use strong, distinct session and JWT secrets outside local development.
-- Do not commit `.env` files or expose database, OAuth, or AWS credentials.
+- Do not commit `.env` files or expose database, OAuth, Redis, or AWS credentials.
 - Google OAuth must use a verified email address.
 - The frontend requires authentication for the library; YouTube search and
   stream resolution are public endpoints.
