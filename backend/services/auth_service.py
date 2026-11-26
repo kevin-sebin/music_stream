@@ -17,7 +17,6 @@ def _extract_safe_frontend_origin(candidate: str | None) -> str | None:
         return None
     parsed = urlparse(candidate)
     if parsed.scheme in ("http", "https") and parsed.hostname in ("localhost", "127.0.0.1"):
-        # Avoid redirecting back onto the backend API origin itself
         if parsed.port != 8000:
             return f"{parsed.scheme}://{parsed.netloc}"
     return None
