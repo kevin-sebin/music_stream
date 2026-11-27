@@ -8,6 +8,7 @@ pydantic==2.12.2
 boto3
 python-dotenv
 authlib
+httpx
 itsdangerous
 PyJWT
 redis

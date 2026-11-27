@@ -88,6 +88,34 @@ The redirect URI must exactly match `GOOGLE_REDIRECT_URI` below. The frontend
 uses `http://localhost:5173` by default; add it as an authorized JavaScript
 origin if required by your OAuth client configuration.
 
+## Run with Docker
+
+Docker Compose starts the frontend, API, MySQL, and Redis. Copy the sample
+environment file to `.env` in the repository root, set the MySQL passwords,
+Google OAuth credentials, and two distinct session/JWT secrets, then start the
+stack:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+Set the Google OAuth authorized redirect URI to the value of
+`GOOGLE_REDIRECT_URI` (the sample uses
+`http://localhost:8000/auth/google/callback`). The app opens at
+`http://localhost:8080`; the API and interactive docs are at
+`http://localhost:8000` and `http://localhost:8000/docs`. The ports are bound
+to localhost for local use. MySQL data and backend static files persist in
+Docker volumes. Stop the services with `docker compose down`; to also remove
+the persisted data, use `docker compose down --volumes`.
+
+The frontend API URL is compiled into the static build. If the browser will
+reach the API at a different address, set `VITE_API_BASE_URL` in `.env` to that
+browser-accessible URL and rebuild the frontend with `docker compose up --build`.
+S3 settings are optional and only needed for playlist cover uploads. Existing
+database tables are created automatically on startup; this does not migrate
+older schemas.
+
 ## Backend setup
 
 From the repository root, create a virtual environment and install the backend
