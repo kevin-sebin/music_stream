@@ -22,4 +22,15 @@ jobs:
           python -m pip install -r backend/requirements-dev.txt
 
       - name: Run playlist service tests
+        env:
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
+          MYSQL_HOST: localhost
+          MYSQL_DB: test
+          GOOGLE_CLIENT_ID: test
+          GOOGLE_CLIENT_SECRET: test
+          GOOGLE_REDIRECT_URI: http://localhost/callback
+          SESSION_SECRET_KEY: test-session-secret
+          JWT_SECRET_KEY: test-jwt-secret
+          REDIS_URL: redis://localhost:6379/0
         run: python -m pytest -q tests/test_playlist_service.py
